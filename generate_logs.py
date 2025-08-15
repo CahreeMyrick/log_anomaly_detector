@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
 def gen_ts():
     # get current time
@@ -17,7 +19,7 @@ def gen_user():
     for i in range(4):
         my_str += str(np.random.randint(9))
 
-    return my_str
+    return int(my_str)
 
 def gen_action():
     acts = ['push', 'pull','commit', 'add']
@@ -88,8 +90,11 @@ def gen_anomalies(
             choice = rng.choice(["huge", "non_numeric"])
             if choice == "huge":
                 df.at[row_idx, col] = str(rng.integers(100000, 1000000))
+            '''
             else:
                 df.at[row_idx, col] = rng.choice(["guest", "unknown", "root"])
+            '''
+
             anomaly_types[row_idx].append(f"user:{choice}")
 
         elif col == "action":
@@ -129,7 +134,17 @@ def gen_anomalies(
     df["anomaly_types"] = [", ".join(x) if x else "" for x in anomaly_types]
     return df        
         
+def pre_proccessing(X):
+    feature_matrix = pd.DataFrame()
 
+    X_ts = pd.to_datetime(X['ts'], errors="coerce")
+    feature_matrix['hour'] = X_ts.dt.hour
+    feature_matrix['dow'] = X_ts.dt.dayofweek
+    feature_matrix['user'] = X['user']
+    feature_matrix['level'] = X['level']
+    feature_matrix = pd.concat([feature_matrix, pd.get_dummies(X['action'], prefix='action', dtype=int)], axis=1)
+    
+    return feature_matrix.values, np.array(X['label'])
 
 def main():
 
@@ -145,7 +160,15 @@ def main():
     print(dataset.head())
     print("\nAnomaly rate:", dataset['label'].mean())
     # print(dataset.head())
+    
 
+    X, y = pre_proccessing(dataset)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_state=15)
+    clf = RandomForestClassifier(n_estimators=100)
+    clf.fit(X_train, y_train)
+    preds = clf.predict(X_test)
+    print(f"acc: {np.mean(preds==y_test)}")
 
 if __name__ == "__main__":
     main()
